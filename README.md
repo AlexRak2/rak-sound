@@ -1,4 +1,4 @@
-# rak-sound
+# rak-sound (WIP - Vibe with me - Open to PR)
 
 > RakSound turns massive, messy sound libraries into a searchable, taggable, waveform-driven workflow.
 
