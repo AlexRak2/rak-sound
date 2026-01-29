@@ -7,6 +7,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -29,6 +30,36 @@ namespace SonnissBrowser
         private readonly AudioPlaybackService _playback = new();
 
         private readonly SoundScanner _scanner;
+        /*public void DebugPrintUnsortedCsv()
+        {
+            var unsortedNames = Sounds
+                .Where(s => s != null)
+                .Where(s => (s.EffectiveCategory ?? "")
+                    .StartsWith("Unsorted", StringComparison.OrdinalIgnoreCase))
+                .Select(s => Path.GetFileName(s.FullPath))   // ✅ file name only
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x)
+                .ToList();
+
+            if (unsortedNames.Count == 0)
+            {
+                Console.WriteLine("UNSORTED: (none)");
+                return;
+            }
+
+            var csv = string.Join(", ", unsortedNames);
+
+            System.Diagnostics.Debug.WriteLine(csv);
+            Console.WriteLine(csv);
+
+            // also drop it on desktop so you can paste it here
+            var outPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                "rak_unsorted_names.txt"
+            );
+
+            File.WriteAllText(outPath, csv);
+        }*/
 
        public MainWindowViewModel()
         {
@@ -465,7 +496,7 @@ namespace SonnissBrowser
         }
 
 
-        private async Task ScanAsync(string rootPath)
+       private async Task ScanAsync(string rootPath)
         {
             try
             {
@@ -487,13 +518,36 @@ namespace SonnissBrowser
                     StatusText = $"{p.phase} ({p.done:n0}/{p.total:n0})";
                 });
 
+                // 1) Scan OFF the UI thread
                 var items = await Task.Run(() => _scanner.ScanFolderWithProgress(rootPath, progress));
 
-                foreach (var it in items)
-                    Sounds.Add(it);
+                // 2) Add items to ObservableCollection in CHUNKS so the UI doesn't freeze
+                LoadingText = "Populating list...";
+                LoadingProgress = 0.90;
 
+                Sounds.Clear();
+
+                const int addChunk = 400;
+                for (int i = 0; i < items.Length; i += addChunk)
+                {
+                    int end = Math.Min(items.Length, i + addChunk);
+                    for (int j = i; j < end; j++)
+                        Sounds.Add(items[j]);
+
+                    // Let WPF process input/render between chunks
+                    await Task.Yield();
+                }
+
+                // 3) Similarity categorization (MUST be async / chunked)
+                LoadingText = "Similarity categorization...";
+                LoadingProgress = 0.92;
+
+                await RunSimilarityPassAsync(progress);
+                await SaveAllCategoriesToOverridesAsync();
+
+                // 4) Rebuild tree + refresh views
                 LoadingText = "Building categories...";
-                LoadingProgress = 0.95;
+                LoadingProgress = 0.97;
 
                 RebuildCategoryTreeFromEffectiveCategories();
 
@@ -515,6 +569,117 @@ namespace SonnissBrowser
                 IsLoading = false;
                 LoadingText = "";
                 LoadingProgress = 0;
+            }
+        }
+       
+        private async Task SaveAllCategoriesToOverridesAsync(IProgress<(int done, int total, string phase)>? progress = null)
+        {
+            if (string.IsNullOrWhiteSpace(_rootPath)) return;
+
+            var total = Sounds.Count;
+
+            // Build the dictionary OFF the UI thread
+            var map = await Task.Run(() =>
+            {
+                var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                for (int i = 0; i < total; i++)
+                {
+                    if (i == 0 || i % 500 == 0 || i == total - 1)
+                        progress?.Report((i, total, "Saving category cache..."));
+
+                    var s = Sounds[i];
+                    if (s == null) continue;
+
+                    var cat = s.EffectiveCategory ?? "";
+                    if (string.IsNullOrWhiteSpace(cat)) continue;
+
+                    var key = SoundScanner.GetOverrideKeyForPath(_rootPath!, s.FullPath);
+                    if (string.IsNullOrWhiteSpace(key)) continue;
+
+                    dict[key] = cat.Trim();
+                }
+
+                return dict;
+            });
+
+            // Write ONCE (still can be fast, but do it after dict is built)
+            _overrides.ReplaceAll(map);
+
+            progress?.Report((total, total, "Saved category cache."));
+        }
+
+       
+        private async Task RunSimilarityPassAsync(IProgress<(int done, int total, string phase)> progress)
+        {
+            // snapshot so we can compute in background without touching ObservableCollection
+            var snapshot = Sounds.ToArray();
+
+            // Build "known" training set (background)
+            progress.Report((0, 1, "Training similarity model..."));
+
+            var known = snapshot
+                .Where(s => s != null)
+                .Where(s => !string.IsNullOrWhiteSpace(s.EffectiveCategory))
+                .Where(s => !s.EffectiveCategory.StartsWith("Unsorted", StringComparison.OrdinalIgnoreCase))
+                .Select(s => (text: SimilarityCategoryAssigner.BuildCombinedText(s.FullPath),
+                              category: s.EffectiveCategory))
+                .ToList();
+
+            if (known.Count < 200)
+                return;
+
+            // Build model OFF UI thread
+            var model = await Task.Run(() =>
+            {
+                var m = new SimilarityCategoryAssigner(topK: 11, minSimilarity: 0.18f, minCentroidSimilarity: 0.15f);
+                m.BuildIndex(known);
+                return m;
+            });
+
+            // Apply results back on UI thread, chunked
+            var targets = snapshot
+                .Where(s => s != null)
+                .Where(s => !s.IsManuallyCategorized)
+                .Where(s => s.EffectiveCategory.StartsWith("Unsorted", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            int total = targets.Count;
+            int done = 0;
+
+            const int chunk = 300;
+
+            for (int i = 0; i < targets.Count; i += chunk)
+            {
+                int end = Math.Min(targets.Count, i + chunk);
+
+                // compute on background
+                var updates = await Task.Run(() =>
+                {
+                    var list = new List<(SoundItem item, string cat, double conf)>(end - i);
+                    for (int k = i; k < end; k++)
+                    {
+                        var s = targets[k];
+                        var text = SimilarityCategoryAssigner.BuildCombinedText(s.FullPath);
+                        var (cat, sim) = model.Infer(text);
+                        if (cat != null)
+                            list.Add((s, cat, Math.Clamp(sim * 1.25, 0.1, 0.98)));
+                    }
+                    return list;
+                });
+
+                // apply on UI thread
+                foreach (var u in updates)
+                {
+                    u.item.SmartCategory = u.cat;
+                    u.item.SmartConfidence = u.conf;
+                }
+
+                done = end;
+                progress.Report((done, total, "Similarity categorization..."));
+
+                // let UI render
+                await Task.Yield();
             }
         }
 

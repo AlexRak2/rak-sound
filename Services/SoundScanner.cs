@@ -50,9 +50,26 @@ namespace SonnissBrowser
 
                 var category = parts.Length > 1 ? parts[0] : "(Uncategorized)";
 
+                var key = GetOverrideKeyForPath(rootPath, fullPath);
+
+                if (_overrides.TryGetManual(key, out var knownCategory))
+                {
+                    var item = new SoundItem(
+                        fileName: Path.GetFileName(fullPath),
+                        fullPath: fullPath,
+                        category: category,
+                        smartCategory: knownCategory,
+                        smartConfidence: 1.0
+                    );
+
+                    item.ManualCategory = knownCategory;
+                    results[i] = item;
+                    continue;
+                }
+                
                 var (smart, conf) = _inferer.Infer(fullPath);
 
-                var item = new SoundItem(
+                var item2 = new SoundItem(
                     fileName: Path.GetFileName(fullPath),
                     fullPath: fullPath,
                     category: category,
@@ -60,12 +77,7 @@ namespace SonnissBrowser
                     smartConfidence: conf
                 );
 
-                // Apply override by RELATIVE PATH key
-                var key = GetOverrideKeyForPath(rootPath, fullPath);
-                if (_overrides.TryGetManual(key, out var manual))
-                    item.ManualCategory = manual;
-
-                results[i] = item;
+                results[i] = item2;
             }
 
             progress.Report((total, total, "Finalizing..."));

@@ -54,6 +54,20 @@ namespace SonnissBrowser
                 _map.Remove(k);
             Save();
         }
+        
+        public void ReplaceAll(IDictionary<string, string> newMap)
+        {
+            _map.Clear();
+
+            foreach (var kv in newMap)
+            {
+                if (string.IsNullOrWhiteSpace(kv.Key)) continue;
+                if (string.IsNullOrWhiteSpace(kv.Value)) continue;
+                _map[kv.Key] = kv.Value.Trim();
+            }
+
+            Save(); // ✅ ONE disk write
+        }
 
         private void Save()
         {
