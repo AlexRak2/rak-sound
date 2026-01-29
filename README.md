@@ -1,2 +1,72 @@
 # rak-sound
-RakSound turns massive, messy sound libraries into a searchable, taggable, waveform-driven workflow. Designed for developers and sound designers who download huge bundles like Sonniss/GDC packs and need a fast way to browse, preview, categorize, and export clips without loading them into a DAW.
+
+> RakSound turns massive, messy sound libraries into a searchable, taggable, waveform-driven workflow.
+
+RakSound is a high-performance desktop sound library manager built for **game developers**, **sound designers**, and **creators** who download huge SFX bundles (Sonniss, GDC packs, asset store libraries, field recordings, etc.) and need a fast way to **find**, **preview**, **categorize**, and **export** sounds without loading them into a DAW.
+
+<img width="2988" height="1716" alt="image" src="https://github.com/user-attachments/assets/c2a2dfcc-a427-41eb-9617-f4fdd1daf7da" />
+
+---
+
+## 🎯 The Problem
+
+You download 50GB+ of sound packs.
+
+They come like this:
+
+
+Hundreds of folders. Thousands of files. Zero organization.
+
+Finding *one* sound becomes:
+
+> open folder → scroll → preview → wrong → back → repeat forever.
+
+---
+
+## 🚀 What RakSound Does
+
+RakSound lets you:
+
+- 📂 Select one root folder containing all your sounds
+- ⚡ Instantly scan thousands of audio files
+- 🧠 Auto-infer smart categories from file names
+- 🔎 Search across filename, folder, inferred tags, and path
+- 🏷 Manually override categories (saved between sessions)
+- 🌳 Browse a clean category tree with counts
+- 🎧 Scrub and preview audio with a waveform
+- ✂ Drag-select a portion of audio to export
+- 💾 Quick-export clips with a single keypress
+- 🔁 Never open a DAW just to trim a sound again
+
+---
+
+## 🖼 Waveform-Driven Editing
+
+RakSound shows a full waveform for every sound.
+
+You can:
+
+- Click anywhere on the wave to start playback there
+- Drag across the wave to select a region
+- Play only that region
+- Export only that region to a new WAV file
+
+This is dramatically faster than opening audio editors.
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Key            | Action                                   |
+|----------------|-------------------------------------------|
+| **Space**      | Play / Pause / Restart selection          |
+| **Left Arrow** | Jump back 1 second                       |
+| **Right Arrow**| Jump forward 1 second                    |
+| **S**          | Quick export selected region to preset folder |
+
+---
+
+## 🏷 Smart Categorization
+
+RakSound analyzes filenames and folder structure to automatically infer categories like:
+
