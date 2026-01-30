@@ -68,6 +68,7 @@ namespace SonnissBrowser
 
             ToggleFavoriteCommand = new RelayCommand(ToggleFavorite);
             ResetEffectsCommand = new RelayCommand(_ => Effects.Reset());
+            ToggleThemeCommand = new RelayCommand(_ => IsDarkMode = !IsDarkMode);
 
             // Connect effects to playback
             _playback.SetEffects(Effects);
@@ -110,6 +111,7 @@ namespace SonnissBrowser
 
             // Load settings
             _exportPresetFolder = _settings.LoadExportPresetFolder();
+            _isDarkMode = _settings.LoadIsDarkMode();
 
             // ✅ Load last root folder (preferred)
             var savedRoot = _settings.LoadLastRootFolder();
@@ -166,6 +168,7 @@ namespace SonnissBrowser
         public ICommand QuickExportSelectionCommand { get; }
         public ICommand ToggleFavoriteCommand { get; }
         public ICommand ResetEffectsCommand { get; }
+        public ICommand ToggleThemeCommand { get; }
 
         // ----------------------------
         // Audio effects
@@ -363,6 +366,28 @@ namespace SonnissBrowser
         }
 
         public bool HasExportPresetFolder => !string.IsNullOrWhiteSpace(_exportPresetFolder);
+
+        // ----------------------------
+        // Theme
+        // ----------------------------
+        private bool _isDarkMode = true;
+        public bool IsDarkMode
+        {
+            get => _isDarkMode;
+            set
+            {
+                if (_isDarkMode == value) return;
+                _isDarkMode = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ThemeIcon));
+                _settings.SaveIsDarkMode(_isDarkMode);
+                ThemeChanged?.Invoke(_isDarkMode);
+            }
+        }
+
+        public string ThemeIcon => _isDarkMode ? "☀" : "🌙";
+
+        public event Action<bool>? ThemeChanged;
 
         // ----------------------------
         // Playback bindables

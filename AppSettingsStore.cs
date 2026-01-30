@@ -13,6 +13,7 @@ namespace SonnissBrowser
         {
             public string? ExportPresetFolder { get; set; }
             public string? LastRootFolder { get; set; }   // ✅ add
+            public bool IsDarkMode { get; set; } = true;  // Default to dark mode
         }
 
         public string? LoadLastRootFolder()
@@ -79,6 +80,43 @@ namespace SonnissBrowser
             {
                 Directory.CreateDirectory(_settingsDir);
                 var s = new AppSettings { ExportPresetFolder = string.IsNullOrWhiteSpace(folder) ? null : folder.Trim() };
+                var json = JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_settingsPath, json);
+            }
+            catch { }
+        }
+
+        public bool LoadIsDarkMode()
+        {
+            try
+            {
+                if (!File.Exists(_settingsPath)) return true; // Default to dark
+                var json = File.ReadAllText(_settingsPath);
+                var s = JsonSerializer.Deserialize<AppSettings>(json);
+                return s?.IsDarkMode ?? true;
+            }
+            catch { return true; }
+        }
+
+        public void SaveIsDarkMode(bool isDarkMode)
+        {
+            try
+            {
+                Directory.CreateDirectory(_settingsDir);
+
+                AppSettings s;
+                if (File.Exists(_settingsPath))
+                {
+                    var jsonOld = File.ReadAllText(_settingsPath);
+                    s = JsonSerializer.Deserialize<AppSettings>(jsonOld) ?? new AppSettings();
+                }
+                else
+                {
+                    s = new AppSettings();
+                }
+
+                s.IsDarkMode = isDarkMode;
+
                 var json = JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(_settingsPath, json);
             }

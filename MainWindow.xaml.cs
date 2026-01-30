@@ -13,7 +13,15 @@ namespace SonnissBrowser
         public MainWindow()
         {
             InitializeComponent();
-            DataContext = new MainWindowViewModel();
+            var vm = new MainWindowViewModel();
+            DataContext = vm;
+
+            // Apply initial theme
+            ApplyTheme(vm.IsDarkMode);
+
+            // Subscribe to theme changes
+            vm.ThemeChanged += ApplyTheme;
+
             Closed += (_, _) => (DataContext as MainWindowViewModel)?.Dispose();
         }
 
@@ -257,6 +265,105 @@ namespace SonnissBrowser
                 MaxHeight = double.PositiveInfinity;
                 MaxWidth = double.PositiveInfinity;
             }
+        }
+
+       private void ApplyTheme(bool isDarkMode)
+        {
+            if (isDarkMode)
+            {
+                // Dark theme colors
+                Resources["Bg0"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
+                Resources["Bg1"] = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x26));
+                Resources["Bg2"] = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x30));
+                Resources["Panel"] = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x26));
+                Resources["Border"] = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x37));
+                Resources["HeaderBg"] = new SolidColorBrush(Color.FromRgb(0x32, 0x32, 0x33));
+
+                Resources["Text0"] = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC));
+                Resources["Text1"] = new SolidColorBrush(Color.FromRgb(0xBB, 0xBB, 0xBB));
+                Resources["Text2"] = new SolidColorBrush(Color.FromRgb(0x85, 0x85, 0x85));
+                Resources["Text3"] = new SolidColorBrush(Color.FromRgb(0x6A, 0x6A, 0x6A));
+
+                Resources["Accent"] = new SolidColorBrush(Color.FromRgb(0x0E, 0x63, 0x9C));
+                Resources["AccentBright"] = new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xCC));
+                Resources["Selection"] = new SolidColorBrush(Color.FromRgb(0x09, 0x47, 0x71));
+
+                Resources["TitleBar"] = new SolidColorBrush(Color.FromRgb(0x11, 0x11, 0x11));
+                Resources["TitleBarBorder"] = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A));
+
+                // ✅ SearchBox (was hardcoded dark in XAML)
+                Resources["InputBg"] = new SolidColorBrush(Color.FromRgb(0x3C, 0x3C, 0x3C));
+                Resources["InputBorder"] = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55));
+                Resources["InputFg"] = new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC));
+
+                // ✅ Waveform brushes (your WaveformControl binds to these)
+                Resources["WaveBg"] = new SolidColorBrush(Color.FromRgb(0x1B, 0x1B, 0x1C));
+                Resources["WaveBorder"] = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x37));
+                Resources["WaveAccent"] = new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xCC));
+                Resources["WaveSelection"] = new SolidColorBrush(Color.FromRgb(0x09, 0x47, 0x71));
+
+                // Caption buttons (dark)
+                Resources["CaptionBtnFg"] = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD));
+                Resources["CaptionBtnHoverBg"] = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A));
+                Resources["CaptionBtnPressedBg"] = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A));
+
+                Resources["CaptionBtnCloseHoverBg"] = new SolidColorBrush(Color.FromRgb(0xC4, 0x2B, 0x1C));
+                Resources["CaptionBtnClosePressedBg"] = new SolidColorBrush(Color.FromRgb(0xA5, 0x23, 0x17));
+                Resources["CaptionBtnFg"] = new SolidColorBrush(Colors.White);
+                Resources["CaptionBtnCloseFg"] = new SolidColorBrush(Colors.White);
+                Resources["CaptionBtnCloseFg"] = new SolidColorBrush(Colors.White);
+
+                
+                Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
+            }
+            else
+            {
+                // Light theme colors
+                Resources["Bg0"] = new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xF5));
+                Resources["Bg1"] = new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0xFF));
+                Resources["Bg2"] = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8));
+                Resources["Panel"] = new SolidColorBrush(Color.FromRgb(0xFA, 0xFA, 0xFA));
+                Resources["Border"] = new SolidColorBrush(Color.FromRgb(0xD0, 0xD0, 0xD0));
+                Resources["HeaderBg"] = new SolidColorBrush(Color.FromRgb(0xE5, 0xE5, 0xE5));
+
+                Resources["Text0"] = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A));
+                Resources["Text1"] = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
+                Resources["Text2"] = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66));
+                Resources["Text3"] = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
+
+                Resources["Accent"] = new SolidColorBrush(Color.FromRgb(0x00, 0x5A, 0x9E));
+                Resources["AccentBright"] = new SolidColorBrush(Color.FromRgb(0x00, 0x78, 0xD4));
+                Resources["Selection"] = new SolidColorBrush(Color.FromRgb(0xCC, 0xE4, 0xF7));
+
+                Resources["TitleBar"] = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0));
+                Resources["TitleBarBorder"] = new SolidColorBrush(Color.FromRgb(0xC0, 0xC0, 0xC0));
+
+                // ✅ SearchBox (light)
+                Resources["InputBg"] = new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0xFF));
+                Resources["InputBorder"] = new SolidColorBrush(Color.FromRgb(0xD0, 0xD0, 0xD0));
+                Resources["InputFg"] = new SolidColorBrush(Color.FromRgb(0x11, 0x11, 0x11));
+
+                // ✅ Waveform brushes (light)
+                Resources["WaveBg"] = new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0xFF));
+                Resources["WaveBorder"] = new SolidColorBrush(Color.FromRgb(0xD0, 0xD0, 0xD0));
+                Resources["WaveAccent"] = new SolidColorBrush(Color.FromRgb(0x00, 0x78, 0xD4));
+                Resources["WaveSelection"] = new SolidColorBrush(Color.FromRgb(0xCC, 0xE4, 0xF7));
+
+                // Caption buttons (light)
+                Resources["CaptionBtnFg"] = new SolidColorBrush(Color.FromRgb(0x22, 0x22, 0x22));
+                Resources["CaptionBtnHoverBg"] = new SolidColorBrush(Color.FromRgb(0xE9, 0xE9, 0xE9));
+                Resources["CaptionBtnPressedBg"] = new SolidColorBrush(Color.FromRgb(0xDD, 0xDD, 0xDD));
+
+        // Close stays red (same is fine for light)
+                Resources["CaptionBtnCloseHoverBg"] = new SolidColorBrush(Color.FromRgb(0xC4, 0x2B, 0x1C));
+                Resources["CaptionBtnClosePressedBg"] = new SolidColorBrush(Color.FromRgb(0xA5, 0x23, 0x17));
+                Resources["CaptionBtnFg"] = new SolidColorBrush(Colors.Black);
+                Resources["CaptionBtnCloseFg"] = new SolidColorBrush(Colors.White);
+                Resources["CaptionBtnCloseFg"] = new SolidColorBrush(Colors.Black);
+
+                Background = new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xF5));
+            }
+
         }
     }
 }
