@@ -4,7 +4,7 @@
 
 RakSound is a high-performance desktop sound library manager built for **game developers**, **sound designers**, and **creators** who download huge SFX bundles (Sonniss, GDC packs, asset store libraries, field recordings, etc.) and need a fast way to **find**, **preview**, **categorize**, and **export** sounds without loading them into a DAW.
 
-<img width="3816" height="2051" alt="image" src="https://github.com/user-attachments/assets/aa123bbe-12f4-4594-b03f-5b107afd7aea" />
+<img width="1498" height="854" alt="image" src="https://github.com/user-attachments/assets/c5ad3c26-d91d-424c-8f8d-4f77eb86187c" />
 
 ---
 
