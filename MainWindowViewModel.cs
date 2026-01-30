@@ -1,5 +1,6 @@
 ﻿using Microsoft.Win32;
 using NAudio.Wave;
+using SonnissBrowser.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -23,6 +24,7 @@ namespace SonnissBrowser
         // ----------------------------
         private readonly CategoryInferer _inferer = new();
         private readonly OverridesStore _overrides = new();
+        private readonly FavoritesStore _favorites = new();
         private readonly AppSettingsStore _settings = new("RakSound");
         private readonly WaveformService _waveform = new();
         private readonly AudioExportService _export = new();
@@ -30,36 +32,6 @@ namespace SonnissBrowser
         private readonly AudioPlaybackService _playback = new();
 
         private readonly SoundScanner _scanner;
-        /*public void DebugPrintUnsortedCsv()
-        {
-            var unsortedNames = Sounds
-                .Where(s => s != null)
-                .Where(s => (s.EffectiveCategory ?? "")
-                    .StartsWith("Unsorted", StringComparison.OrdinalIgnoreCase))
-                .Select(s => Path.GetFileName(s.FullPath))   // ✅ file name only
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x)
-                .ToList();
-
-            if (unsortedNames.Count == 0)
-            {
-                Console.WriteLine("UNSORTED: (none)");
-                return;
-            }
-
-            var csv = string.Join(", ", unsortedNames);
-
-            System.Diagnostics.Debug.WriteLine(csv);
-            Console.WriteLine(csv);
-
-            // also drop it on desktop so you can paste it here
-            var outPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-                "rak_unsorted_names.txt"
-            );
-
-            File.WriteAllText(outPath, csv);
-        }*/
 
        public MainWindowViewModel()
         {
@@ -94,6 +66,12 @@ namespace SonnissBrowser
                 Selected.ManualCategory = null;
             }, _ => Selected != null && Selected.IsManuallyCategorized);
 
+            ToggleFavoriteCommand = new RelayCommand(ToggleFavorite);
+            ResetEffectsCommand = new RelayCommand(_ => Effects.Reset());
+
+            // Connect effects to playback
+            _playback.SetEffects(Effects);
+
             // Selection-derived properties
             SelectedItems.CollectionChanged += (_, __) =>
             {
@@ -104,8 +82,7 @@ namespace SonnissBrowser
 
             // View
             SoundsView = CollectionViewSource.GetDefaultView(Sounds);
-            SoundsView.SortDescriptions.Add(new SortDescription(nameof(SoundItem.EffectiveCategory), ListSortDirection.Ascending));
-            SoundsView.SortDescriptions.Add(new SortDescription(nameof(SoundItem.FileName), ListSortDirection.Ascending));
+            UpdateSorting();
             SoundsView.Filter = FilterSoundItem;
 
             // Playback events
@@ -187,6 +164,13 @@ namespace SonnissBrowser
         public ICommand ClearCategoryForSelectionCommand { get; }
         public ICommand ChooseExportFolderCommand { get; }
         public ICommand QuickExportSelectionCommand { get; }
+        public ICommand ToggleFavoriteCommand { get; }
+        public ICommand ResetEffectsCommand { get; }
+
+        // ----------------------------
+        // Audio effects
+        // ----------------------------
+        public AudioEffectsSettings Effects { get; } = new();
 
         // ----------------------------
         // Basic state
@@ -212,6 +196,7 @@ namespace SonnissBrowser
                 OnPropertyChanged(nameof(NowPlayingSubtitle));
 
                 ClearSelection();
+                Effects.Reset();
 
                 _ = LoadWaveformForSelectedAsync();
                 _ = LoadMetaForSelectedAsync();
@@ -243,10 +228,85 @@ namespace SonnissBrowser
             get => _searchText;
             set
             {
+                var oldSearch = _searchText;
                 _searchText = value ?? "";
                 OnPropertyChanged();
+
+                // Update sorting when entering or leaving search mode
+                bool wasSearching = !string.IsNullOrWhiteSpace(oldSearch);
+                bool isSearching = !string.IsNullOrWhiteSpace(_searchText);
+                if (wasSearching != isSearching)
+                    UpdateSorting();
+
                 SoundsView.Refresh();
                 UpdateStatus();
+            }
+        }
+
+        // ----------------------------
+        // Column sorting
+        // ----------------------------
+        private string _sortColumn = nameof(SoundItem.EffectiveCategory);
+        private ListSortDirection _sortDirection = ListSortDirection.Ascending;
+
+        public string SortColumn
+        {
+            get => _sortColumn;
+            private set => SetField(ref _sortColumn, value);
+        }
+
+        public ListSortDirection SortDirection
+        {
+            get => _sortDirection;
+            private set
+            {
+                _sortDirection = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(SortDirectionIndicator));
+            }
+        }
+
+        public string SortDirectionIndicator => _sortDirection == ListSortDirection.Ascending ? "▲" : "▼";
+
+        public void SortByColumn(string propertyName)
+        {
+            if (_sortColumn == propertyName)
+            {
+                // Toggle direction
+                SortDirection = _sortDirection == ListSortDirection.Ascending
+                    ? ListSortDirection.Descending
+                    : ListSortDirection.Ascending;
+            }
+            else
+            {
+                // New column, default to ascending (except for favorites which defaults to descending)
+                SortColumn = propertyName;
+                SortDirection = propertyName == nameof(SoundItem.IsFavorite)
+                    ? ListSortDirection.Descending
+                    : ListSortDirection.Ascending;
+            }
+
+            UpdateSorting();
+            SoundsView.Refresh();
+        }
+
+        private void UpdateSorting()
+        {
+            SoundsView.SortDescriptions.Clear();
+
+            // When searching, always show favorites first (before user's chosen sort)
+            if (!string.IsNullOrWhiteSpace(_searchText) && _sortColumn != nameof(SoundItem.IsFavorite))
+            {
+                SoundsView.SortDescriptions.Add(new SortDescription(nameof(SoundItem.IsFavorite), ListSortDirection.Descending));
+            }
+
+            // User's chosen sort column
+            SoundsView.SortDescriptions.Add(new SortDescription(_sortColumn, _sortDirection));
+
+            // Secondary sort by filename if not already sorting by it
+            if (_sortColumn != nameof(SoundItem.FileName))
+            {
+                SoundsView.SortDescriptions.Add(new SortDescription(nameof(SoundItem.FileName), ListSortDirection.Ascending));
             }
         }
 
@@ -510,6 +570,7 @@ namespace SonnissBrowser
                 CategoryOptions.Clear();
 
                 _overrides.SetRoot(rootPath);
+                _favorites.SetRoot(rootPath);
 
                 var progress = new Progress<(int done, int total, string phase)>(p =>
                 {
@@ -532,7 +593,12 @@ namespace SonnissBrowser
                 {
                     int end = Math.Min(items.Length, i + addChunk);
                     for (int j = i; j < end; j++)
-                        Sounds.Add(items[j]);
+                    {
+                        var item = items[j];
+                        var key = SoundScanner.GetOverrideKeyForPath(rootPath, item.FullPath);
+                        item.IsFavorite = _favorites.IsFavorite(key);
+                        Sounds.Add(item);
+                    }
 
                     // Let WPF process input/render between chunks
                     await Task.Yield();
@@ -760,6 +826,22 @@ namespace SonnissBrowser
         }
 
         // ----------------------------
+        // Favorites
+        // ----------------------------
+        private void ToggleFavorite(object? param)
+        {
+            SoundItem? item = param as SoundItem ?? Selected;
+            if (item == null) return;
+            if (string.IsNullOrWhiteSpace(_rootPath)) return;
+
+            var key = SoundScanner.GetOverrideKeyForPath(_rootPath!, item.FullPath);
+            item.IsFavorite = !item.IsFavorite;
+            _favorites.SetFavorite(key, item.IsFavorite);
+
+            SoundsView.Refresh();
+        }
+
+        // ----------------------------
         // Playback
         // ----------------------------
         public void PlaySelected()
@@ -916,6 +998,7 @@ namespace SonnissBrowser
                 SelectionStartSeconds,
                 SelectionEndSeconds,
                 HasExportPresetFolder ? ExportPresetFolder : null,
+                Effects,
                 msg => StatusText = msg
             );
         }
@@ -930,6 +1013,7 @@ namespace SonnissBrowser
                 SelectionStartSeconds,
                 SelectionEndSeconds,
                 ExportPresetFolder,
+                Effects,
                 msg => StatusText = msg
             );
         }

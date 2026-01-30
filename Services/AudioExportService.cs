@@ -1,6 +1,8 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using SonnissBrowser.Models;
+using SonnissBrowser.Services.SampleProviders;
 using System;
 using System.IO;
 using System.Linq;
@@ -9,7 +11,7 @@ namespace SonnissBrowser
 {
     public sealed class AudioExportService
     {
-        public void ExportSelectionDialog(string srcPath, double startSeconds, double endSeconds, string? initialDir, Action<string> setStatus)
+        public void ExportSelectionDialog(string srcPath, double startSeconds, double endSeconds, string? initialDir, AudioEffectsSettings? effects, Action<string> setStatus)
         {
             if (string.IsNullOrWhiteSpace(srcPath)) return;
 
@@ -30,7 +32,7 @@ namespace SonnissBrowser
 
             try
             {
-                ExportToWav(srcPath, dlg.FileName, startSeconds, endSeconds);
+                ExportToWav(srcPath, dlg.FileName, startSeconds, endSeconds, effects);
                 setStatus($"Exported: {Path.GetFileName(dlg.FileName)}");
             }
             catch (Exception ex)
@@ -39,7 +41,7 @@ namespace SonnissBrowser
             }
         }
 
-        public void QuickExportToFolder(string srcPath, double startSeconds, double endSeconds, string folder, Action<string> setStatus)
+        public void QuickExportToFolder(string srcPath, double startSeconds, double endSeconds, string folder, AudioEffectsSettings? effects, Action<string> setStatus)
         {
             if (string.IsNullOrWhiteSpace(srcPath)) return;
             if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
@@ -59,7 +61,7 @@ namespace SonnissBrowser
 
             try
             {
-                ExportToWav(srcPath, outPath, startSeconds, endSeconds);
+                ExportToWav(srcPath, outPath, startSeconds, endSeconds, effects);
                 setStatus($"Saved: {Path.GetFileName(outPath)}");
             }
             catch (Exception ex)
@@ -68,7 +70,7 @@ namespace SonnissBrowser
             }
         }
 
-        private static void ExportToWav(string srcPath, string outPath, double startSeconds, double endSeconds)
+        private static void ExportToWav(string srcPath, string outPath, double startSeconds, double endSeconds, AudioEffectsSettings? effects)
         {
             using var reader = new AudioFileReader(srcPath);
 
@@ -79,13 +81,22 @@ namespace SonnissBrowser
             var length = Math.Max(0, endSeconds - startSeconds);
             if (length <= 0.01) return;
 
+            // Slice the audio to the selection
             var slice = new OffsetSampleProvider(reader)
             {
                 SkipOver = TimeSpan.FromSeconds(startSeconds),
                 Take = TimeSpan.FromSeconds(length)
             };
 
-            WaveFileWriter.CreateWaveFile16(outPath, slice);
+            ISampleProvider output = slice;
+
+            // Apply effects if any
+            if (effects != null && effects.HasEffects)
+            {
+                output = EffectsChainBuilder.BuildChain(slice, effects, length);
+            }
+
+            WaveFileWriter.CreateWaveFile16(outPath, output);
         }
 
         private static void NormalizeRange(ref double a, ref double b)

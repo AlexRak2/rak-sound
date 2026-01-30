@@ -18,8 +18,11 @@
 
 
     <Window.Resources>
-        
+
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <local:FavoriteStarConverter x:Key="FavoriteStarConverter"/>
+        <local:FavoriteColorConverter x:Key="FavoriteColorConverter"/>
+        <local:SortHeaderConverter x:Key="SortHeaderConverter"/>
 
         <!-- Soundly Color Palette -->
         <SolidColorBrush x:Key="Bg0" Color="#1E1E1E"/>
@@ -220,7 +223,7 @@
             </Setter>
         </Style>
 
-        <!-- Small Grey Headers (Soundly style) -->
+        <!-- Small Grey Headers (Soundly style) - Clickable for sorting -->
         <Style TargetType="{x:Type GridViewColumnHeader}">
             <Setter Property="Background" Value="{StaticResource HeaderBg}"/>
             <Setter Property="Foreground" Value="{StaticResource Text2}"/>
@@ -230,19 +233,27 @@
             <Setter Property="FontSize" Value="10"/>
             <Setter Property="FontWeight" Value="Normal"/>
             <Setter Property="Height" Value="24"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type GridViewColumnHeader}">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="HeaderBorder"
+                                Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 Padding="{TemplateBinding Padding}">
-                            <TextBlock Text="{TemplateBinding Content}"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       FontSize="{TemplateBinding FontSize}"
-                                       FontWeight="{TemplateBinding FontWeight}"
-                                       VerticalAlignment="Center"/>
+                            <ContentPresenter HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="#3A3A3D"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="#404045"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -828,14 +839,91 @@
                           SelectedItem="{Binding Selected}"
                           SelectionMode="Extended"
                           local:ListViewSelectedItemsBehavior.SelectedItems="{Binding SelectedItems}"
-                          MouseDoubleClick="ListView_MouseDoubleClick">
+                          MouseDoubleClick="ListView_MouseDoubleClick"
+                          GridViewColumnHeader.Click="GridViewColumnHeader_Click">
 
 
                     <ListView.View>
                         <GridView>
-                            <GridViewColumn Header="Name" Width="720" DisplayMemberBinding="{Binding FileName}" />
-                            <GridViewColumn Header="Category" Width="260" DisplayMemberBinding="{Binding EffectiveCategory}" />
-                            <GridViewColumn Header="Library" Width="260" DisplayMemberBinding="{Binding Category}" />
+                            <GridViewColumn Width="32">
+                                <GridViewColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock>
+                                            <TextBlock.Text>
+                                                <MultiBinding Converter="{StaticResource SortHeaderConverter}" ConverterParameter="★">
+                                                    <Binding Path="DataContext.SortColumn" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                    <Binding Path="DataContext.SortDirection" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </GridViewColumn.HeaderTemplate>
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding IsFavorite, Converter={StaticResource FavoriteStarConverter}}"
+                                                Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                                CommandParameter="{Binding}"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Foreground="{Binding IsFavorite, Converter={StaticResource FavoriteColorConverter}}"
+                                                FontSize="14"
+                                                Padding="0"
+                                                Margin="-8,0,0,0"
+                                                Cursor="Hand"
+                                                ToolTip="Toggle favorite">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="Transparent">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Width="688" DisplayMemberBinding="{Binding FileName}">
+                                <GridViewColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock>
+                                            <TextBlock.Text>
+                                                <MultiBinding Converter="{StaticResource SortHeaderConverter}" ConverterParameter="Name">
+                                                    <Binding Path="DataContext.SortColumn" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                    <Binding Path="DataContext.SortDirection" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </GridViewColumn.HeaderTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Width="260" DisplayMemberBinding="{Binding EffectiveCategory}">
+                                <GridViewColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock>
+                                            <TextBlock.Text>
+                                                <MultiBinding Converter="{StaticResource SortHeaderConverter}" ConverterParameter="Category">
+                                                    <Binding Path="DataContext.SortColumn" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                    <Binding Path="DataContext.SortDirection" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </GridViewColumn.HeaderTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Width="260" DisplayMemberBinding="{Binding Category}">
+                                <GridViewColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock>
+                                            <TextBlock.Text>
+                                                <MultiBinding Converter="{StaticResource SortHeaderConverter}" ConverterParameter="Library">
+                                                    <Binding Path="DataContext.SortColumn" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                    <Binding Path="DataContext.SortDirection" RelativeSource="{RelativeSource AncestorType=ListView}"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </GridViewColumn.HeaderTemplate>
+                            </GridViewColumn>
                         </GridView>
                     </ListView.View>
                 </ListView>
@@ -985,6 +1073,109 @@
 
                     <TextBlock Text="{Binding Selected.Meta.LastWriteTime, StringFormat=Modified: {0}}"
                                Foreground="{StaticResource Text1}" FontSize="10"/>
+
+                    <!-- Effects -->
+                    <TextBlock Text="EFFECTS"
+                               Foreground="{StaticResource Text3}"
+                               FontSize="9"
+                               FontWeight="SemiBold"
+                               Margin="0,16,0,8"/>
+
+                    <TextBlock Text="Pitch (semitones)"
+                               Foreground="{StaticResource Text2}"
+                               FontSize="10"
+                               Margin="0,0,0,2"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="40"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0"
+                                Minimum="-12" Maximum="12"
+                                Value="{Binding Effects.PitchSemitones}"
+                                TickFrequency="1"
+                                IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Effects.PitchSemitones, StringFormat={}{0:+0;-0;0}}"
+                                   Foreground="{StaticResource Text1}"
+                                   FontSize="10"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <TextBlock Text="Reverb"
+                               Foreground="{StaticResource Text2}"
+                               FontSize="10"
+                               Margin="0,8,0,2"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="40"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0"
+                                Minimum="0" Maximum="1"
+                                Value="{Binding Effects.ReverbMix}"
+                                TickFrequency="0.1"
+                                VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Effects.ReverbMix, StringFormat={}{0:P0}}"
+                                   Foreground="{StaticResource Text1}"
+                                   FontSize="10"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <TextBlock Text="Fade In (sec)"
+                               Foreground="{StaticResource Text2}"
+                               FontSize="10"
+                               Margin="0,8,0,2"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="40"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0"
+                                Minimum="0" Maximum="2"
+                                Value="{Binding Effects.FadeInSeconds}"
+                                TickFrequency="0.1"
+                                VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Effects.FadeInSeconds, StringFormat={}{0:0.0}s}"
+                                   Foreground="{StaticResource Text1}"
+                                   FontSize="10"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <TextBlock Text="Fade Out (sec)"
+                               Foreground="{StaticResource Text2}"
+                               FontSize="10"
+                               Margin="0,8,0,2"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="40"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0"
+                                Minimum="0" Maximum="2"
+                                Value="{Binding Effects.FadeOutSeconds}"
+                                TickFrequency="0.1"
+                                VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Effects.FadeOutSeconds, StringFormat={}{0:0.0}s}"
+                                   Foreground="{StaticResource Text1}"
+                                   FontSize="10"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right"/>
+                    </Grid>
+
+                    <Button Style="{StaticResource Btn}"
+                            Content="Reset Effects"
+                            Command="{Binding ResetEffectsCommand}"
+                            Margin="0,10,0,0"
+                            Width="120"
+                            HorizontalAlignment="Left"/>
 
                 </StackPanel>
             </ScrollViewer>

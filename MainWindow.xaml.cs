@@ -203,6 +203,38 @@ namespace SonnissBrowser
         private void Close_Click(object sender, RoutedEventArgs e)
             => SystemCommands.CloseWindow(this);
 
+        private void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)
+        {
+            if (e.OriginalSource is GridViewColumnHeader header && header.Column != null)
+            {
+                // Get the binding path from the column
+                string? sortBy = null;
+
+                if (header.Column.DisplayMemberBinding is System.Windows.Data.Binding binding)
+                {
+                    sortBy = binding.Path.Path;
+                }
+                else
+                {
+                    // For the favorites column (no DisplayMemberBinding), check if it's the first column
+                    var listView = FindAncestorOrSelf<ListView>(header);
+                    if (listView?.View is GridView gridView)
+                    {
+                        int columnIndex = gridView.Columns.IndexOf(header.Column);
+                        if (columnIndex == 0) // First column is the favorites column
+                        {
+                            sortBy = nameof(SoundItem.IsFavorite);
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(sortBy))
+                {
+                    VM.SortByColumn(sortBy);
+                }
+            }
+        }
+
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             ApplyWorkAreaMaxSize();

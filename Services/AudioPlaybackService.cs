@@ -1,12 +1,16 @@
-﻿using System;
-using System.Windows.Media;
+using NAudio.Wave;
+using SonnissBrowser.Models;
+using SonnissBrowser.Services.SampleProviders;
+using System;
 using System.Windows.Threading;
 
 namespace SonnissBrowser
 {
     public sealed class AudioPlaybackService : IDisposable
     {
-        private readonly MediaPlayer _player = new();
+        private WaveOutEvent? _waveOut;
+        private AudioFileReader? _reader;
+        private ISampleProvider? _effectsChain;
         private readonly DispatcherTimer _timer;
 
         private bool _isPlaying;
@@ -17,6 +21,10 @@ namespace SonnissBrowser
         private double _playRangeEndSeconds;
 
         private string? _currentPath;
+        private double _duration;
+        private double _volume = 1.0;
+
+        private AudioEffectsSettings? _effects;
 
         public event Action<string>? MediaFailed;
         public event Action<double>? DurationChanged;
@@ -25,26 +33,75 @@ namespace SonnissBrowser
 
         public AudioPlaybackService()
         {
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             _timer.Tick += (_, _) => Tick();
-
-            _player.MediaFailed += (_, e) => MediaFailed?.Invoke(e.ErrorException?.Message ?? "Unknown error");
-            _player.MediaOpened += (_, _) =>
-            {
-                if (_player.NaturalDuration.HasTimeSpan)
-                    DurationChanged?.Invoke(_player.NaturalDuration.TimeSpan.TotalSeconds);
-            };
-            _player.MediaEnded += (_, _) =>
-            {
-                _isPlaying = false;
-                _playRangeActive = false;
-                PlayingChanged?.Invoke(_isPlaying);
-            };
         }
 
-        public void SetVolume(double v) => _player.Volume = Math.Clamp(v, 0, 1);
-
         public bool IsPlaying => _isPlaying;
+
+        public void SetVolume(double v)
+        {
+            _volume = Math.Clamp(v, 0, 1);
+            if (_waveOut != null)
+                _waveOut.Volume = (float)_volume;
+        }
+
+        public void SetEffects(AudioEffectsSettings? effects)
+        {
+            if (_effects != null)
+                _effects.EffectsChanged -= OnEffectsChanged;
+
+            _effects = effects;
+
+            if (_effects != null)
+                _effects.EffectsChanged += OnEffectsChanged;
+        }
+
+        private void OnEffectsChanged()
+        {
+            if (_currentPath == null || _reader == null) return;
+
+            // Remember position and playing state
+            var wasPlaying = _isPlaying;
+            var position = GetCurrentPosition();
+
+            // Rebuild the effects chain
+            RebuildEffectsChain();
+
+            // Seek to previous position
+            if (_reader != null && position > 0)
+            {
+                SeekInternal(position);
+            }
+
+            // Resume if was playing
+            if (wasPlaying)
+            {
+                _waveOut?.Play();
+                _isPlaying = true;
+            }
+        }
+
+        private void RebuildEffectsChain()
+        {
+            if (_reader == null) return;
+
+            // Stop current playback
+            _waveOut?.Stop();
+            _waveOut?.Dispose();
+
+            // Reset reader to beginning
+            _reader.Position = 0;
+
+            // Build new effects chain
+            _effectsChain = EffectsChainBuilder.BuildChain(_reader, _effects!, _duration);
+
+            // Create new output
+            _waveOut = new WaveOutEvent();
+            _waveOut.Init(_effectsChain);
+            _waveOut.Volume = (float)_volume;
+            _waveOut.PlaybackStopped += OnPlaybackStopped;
+        }
 
         public void OpenIfNeeded(string path)
         {
@@ -52,31 +109,72 @@ namespace SonnissBrowser
 
             if (!string.IsNullOrWhiteSpace(_currentPath) &&
                 string.Equals(_currentPath, path, StringComparison.OrdinalIgnoreCase) &&
-                _player.Source != null)
+                _reader != null)
                 return;
 
             StopInternal();
 
-            _currentPath = path;
-            _player.Open(new Uri(path, UriKind.Absolute));
-            _timer.Start();
+            try
+            {
+                _currentPath = path;
+                _reader = new AudioFileReader(path);
+                _duration = _reader.TotalTime.TotalSeconds;
+
+                // Build effects chain
+                _effectsChain = EffectsChainBuilder.BuildChain(_reader, _effects!, _duration);
+
+                _waveOut = new WaveOutEvent();
+                _waveOut.Init(_effectsChain);
+                _waveOut.Volume = (float)_volume;
+                _waveOut.PlaybackStopped += OnPlaybackStopped;
+
+                _timer.Start();
+                DurationChanged?.Invoke(_duration);
+            }
+            catch (Exception ex)
+            {
+                MediaFailed?.Invoke(ex.Message);
+                StopInternal();
+            }
+        }
+
+        private void OnPlaybackStopped(object? sender, StoppedEventArgs e)
+        {
+            if (e.Exception != null)
+            {
+                MediaFailed?.Invoke(e.Exception.Message);
+            }
+
+            // Only fire ended event if we were playing and reached the end
+            if (_isPlaying && !_isSeeking && _reader != null)
+            {
+                var pos = GetCurrentPosition();
+                if (pos >= _duration - 0.1)
+                {
+                    _isPlaying = false;
+                    _playRangeActive = false;
+                    PlayingChanged?.Invoke(_isPlaying);
+                }
+            }
         }
 
         public void TogglePlayPause(string path)
         {
             OpenIfNeeded(path);
 
+            if (_waveOut == null) return;
+
             try
             {
                 if (_isPlaying)
                 {
-                    _player.Pause();
+                    _waveOut.Pause();
                     _isPlaying = false;
                     _playRangeActive = false;
                 }
                 else
                 {
-                    _player.Play();
+                    _waveOut.Play();
                     _isPlaying = true;
                 }
 
@@ -96,8 +194,13 @@ namespace SonnissBrowser
             try
             {
                 _timer.Stop();
-                _player.Stop();
-                _player.Close();
+                _waveOut?.Stop();
+                _waveOut?.Dispose();
+                _waveOut = null;
+
+                _reader?.Dispose();
+                _reader = null;
+                _effectsChain = null;
             }
             catch { }
 
@@ -105,6 +208,7 @@ namespace SonnissBrowser
             _isSeeking = false;
             _pendingSeekSeconds = 0;
             _playRangeActive = false;
+            _duration = 0;
 
             PlayingChanged?.Invoke(_isPlaying);
             PositionChanged?.Invoke(0);
@@ -125,12 +229,12 @@ namespace SonnissBrowser
 
         public void CommitSeek(double durationSeconds)
         {
-            if (_player.Source == null) { _isSeeking = false; return; }
+            if (_reader == null) { _isSeeking = false; return; }
 
             try
             {
                 var s = Math.Clamp(_pendingSeekSeconds, 0, durationSeconds);
-                _player.Position = TimeSpan.FromSeconds(s);
+                SeekInternal(s);
                 PositionChanged?.Invoke(s);
             }
             catch { }
@@ -140,16 +244,31 @@ namespace SonnissBrowser
             }
         }
 
+        private void SeekInternal(double seconds)
+        {
+            if (_reader == null) return;
+
+            var bytePos = (long)(seconds * _reader.WaveFormat.AverageBytesPerSecond);
+            bytePos = bytePos - (bytePos % _reader.WaveFormat.BlockAlign);
+            _reader.Position = Math.Clamp(bytePos, 0, _reader.Length);
+        }
+
+        private double GetCurrentPosition()
+        {
+            if (_reader == null) return 0;
+            return (double)_reader.Position / _reader.WaveFormat.AverageBytesPerSecond;
+        }
+
         public void Nudge(double deltaSeconds, double durationSeconds)
         {
-            if (_player.Source == null) return;
+            if (_reader == null) return;
 
-            var newPos = _player.Position.TotalSeconds + deltaSeconds;
+            var newPos = GetCurrentPosition() + deltaSeconds;
             newPos = Math.Clamp(newPos, 0, durationSeconds);
 
             try
             {
-                _player.Position = TimeSpan.FromSeconds(newPos);
+                SeekInternal(newPos);
                 PositionChanged?.Invoke(newPos);
             }
             catch { }
@@ -158,7 +277,7 @@ namespace SonnissBrowser
         public void PlayRange(string path, double startSeconds, double endSeconds, double durationSeconds)
         {
             OpenIfNeeded(path);
-            if (_player.Source == null) return;
+            if (_reader == null || _waveOut == null) return;
 
             if (endSeconds < startSeconds) (startSeconds, endSeconds) = (endSeconds, startSeconds);
 
@@ -182,12 +301,12 @@ namespace SonnissBrowser
 
         public void Seek(double seconds, double durationSeconds)
         {
-            if (_player.Source == null) return;
+            if (_reader == null) return;
 
             seconds = Math.Clamp(seconds, 0, durationSeconds);
             try
             {
-                _player.Position = TimeSpan.FromSeconds(seconds);
+                SeekInternal(seconds);
                 PositionChanged?.Invoke(seconds);
             }
             catch { }
@@ -195,11 +314,11 @@ namespace SonnissBrowser
 
         private void ForcePlay()
         {
-            if (_player.Source == null) return;
+            if (_waveOut == null) return;
 
             try
             {
-                _player.Play();
+                _waveOut.Play();
                 _isPlaying = true;
                 PlayingChanged?.Invoke(_isPlaying);
             }
@@ -208,30 +327,39 @@ namespace SonnissBrowser
 
         private void Tick()
         {
-            if (_player.Source == null) return;
-
-            if (_player.NaturalDuration.HasTimeSpan)
-                DurationChanged?.Invoke(_player.NaturalDuration.TimeSpan.TotalSeconds);
+            if (_reader == null) return;
 
             if (!_isSeeking)
-                PositionChanged?.Invoke(_player.Position.TotalSeconds);
-
-            if (_playRangeActive && _player.NaturalDuration.HasTimeSpan)
             {
-                var pos = _player.Position.TotalSeconds;
-                if (pos >= _playRangeEndSeconds - 0.01)
+                var pos = GetCurrentPosition();
+                PositionChanged?.Invoke(pos);
+
+                // Check for range end
+                if (_playRangeActive && pos >= _playRangeEndSeconds - 0.01)
                 {
                     _playRangeActive = false;
-
-                    try { _player.Pause(); } catch { }
+                    _waveOut?.Pause();
                     _isPlaying = false;
                     PlayingChanged?.Invoke(_isPlaying);
-
                     PositionChanged?.Invoke(_playRangeEndSeconds);
+                }
+
+                // Check for natural end
+                if (_isPlaying && pos >= _duration - 0.05)
+                {
+                    _isPlaying = false;
+                    _playRangeActive = false;
+                    PlayingChanged?.Invoke(_isPlaying);
                 }
             }
         }
 
-        public void Dispose() => Stop();
+        public void Dispose()
+        {
+            if (_effects != null)
+                _effects.EffectsChanged -= OnEffectsChanged;
+
+            Stop();
+        }
     }
 }

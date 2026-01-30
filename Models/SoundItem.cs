@@ -50,6 +50,22 @@ namespace SonnissBrowser
         }
 
         // ------------------------------------------------------------
+        // Favorite
+        // ------------------------------------------------------------
+
+        private bool _isFavorite;
+        public bool IsFavorite
+        {
+            get => _isFavorite;
+            set
+            {
+                if (_isFavorite == value) return;
+                _isFavorite = value;
+                OnPropertyChanged();
+            }
+        }
+
+        // ------------------------------------------------------------
         // Manual override
         // ------------------------------------------------------------
 
