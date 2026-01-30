@@ -86,6 +86,20 @@ namespace SonnissBrowser
                 typeof(WaveformControl),
                 new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender));
 
+        public static readonly DependencyProperty FadeInSecondsProperty =
+            DependencyProperty.Register(
+                nameof(FadeInSeconds),
+                typeof(double),
+                typeof(WaveformControl),
+                new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty FadeOutSecondsProperty =
+            DependencyProperty.Register(
+                nameof(FadeOutSeconds),
+                typeof(double),
+                typeof(WaveformControl),
+                new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender));
+
         // Bindable CLR properties
         public float[] Peaks
         {
@@ -153,6 +167,18 @@ namespace SonnissBrowser
             set => SetValue(CornerRadiusProperty, value);
         }
 
+        public double FadeInSeconds
+        {
+            get => (double)GetValue(FadeInSecondsProperty);
+            set => SetValue(FadeInSecondsProperty, value);
+        }
+
+        public double FadeOutSeconds
+        {
+            get => (double)GetValue(FadeOutSecondsProperty);
+            set => SetValue(FadeOutSecondsProperty, value);
+        }
+
         protected override void OnRender(DrawingContext dc)
         {
             base.OnRender(dc);
@@ -208,6 +234,69 @@ namespace SonnissBrowser
 
                 dc.DrawLine(pen, new Point(x, mid - y), new Point(x, mid + y));
             }
+
+            // Fade curves - drawn relative to selection if one exists, otherwise relative to full clip
+            var fadePen = new Pen(new SolidColorBrush(Color.FromArgb(200, 255, 165, 0)), 2); // Orange color
+
+            // Determine the region for fade effects (selection or full clip)
+            double fadeRegionStartX = 0;
+            double fadeRegionEndX = w;
+            double fadeRegionDuration = DurationSeconds;
+
+            if (HasSelection(out var selStart, out var selEnd))
+            {
+                // Use selection bounds for fade curves
+                fadeRegionStartX = (selStart / DurationSeconds) * w;
+                fadeRegionEndX = (selEnd / DurationSeconds) * w;
+                fadeRegionDuration = selEnd - selStart;
+            }
+
+            double fadeRegionWidth = fadeRegionEndX - fadeRegionStartX;
+
+            // Fade-in curve (relative to fade region start)
+            if (FadeInSeconds > 0.01 && fadeRegionDuration > 0.01)
+            {
+                var fadeInEndX = fadeRegionStartX + (FadeInSeconds / fadeRegionDuration) * fadeRegionWidth;
+                // Clamp to not exceed the region
+                fadeInEndX = Math.Min(fadeInEndX, fadeRegionEndX);
+
+                var fadeGeometry = new StreamGeometry();
+                using (var ctx = fadeGeometry.Open())
+                {
+                    ctx.BeginFigure(new Point(fadeRegionStartX, h), false, false);
+                    // Quadratic curve from bottom at region start to top at fadeInEndX
+                    ctx.QuadraticBezierTo(
+                        new Point(fadeRegionStartX + (fadeInEndX - fadeRegionStartX) * 0.5, h * 0.15), // Control point
+                        new Point(fadeInEndX, 0),              // End point
+                        true,                                  // isStroked
+                        false);                                // isSmoothJoin
+                }
+                fadeGeometry.Freeze();
+                dc.DrawGeometry(null, fadePen, fadeGeometry);
+            }
+
+            // Fade-out curve (relative to fade region end)
+            if (FadeOutSeconds > 0.01 && fadeRegionDuration > 0.01)
+            {
+                var fadeOutStartX = fadeRegionEndX - (FadeOutSeconds / fadeRegionDuration) * fadeRegionWidth;
+                // Clamp to not go before the region start
+                fadeOutStartX = Math.Max(fadeOutStartX, fadeRegionStartX);
+
+                var fadeGeometry = new StreamGeometry();
+                using (var ctx = fadeGeometry.Open())
+                {
+                    ctx.BeginFigure(new Point(fadeOutStartX, 0), false, false);
+                    // Quadratic curve from top at fadeOutStartX to bottom at region end
+                    ctx.QuadraticBezierTo(
+                        new Point(fadeOutStartX + (fadeRegionEndX - fadeOutStartX) * 0.5, h * 0.15), // Control point
+                        new Point(fadeRegionEndX, h),                                                 // End point
+                        true,                                                                         // isStroked
+                        false);                                                                       // isSmoothJoin
+                }
+                fadeGeometry.Freeze();
+                dc.DrawGeometry(null, fadePen, fadeGeometry);
+            }
+
 
             // Playhead
             if (DurationSeconds > 0)

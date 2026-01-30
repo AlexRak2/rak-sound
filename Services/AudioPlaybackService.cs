@@ -11,6 +11,8 @@ namespace SonnissBrowser
         private WaveOutEvent? _waveOut;
         private AudioFileReader? _reader;
         private ISampleProvider? _effectsChain;
+        private SelectionEffectsProvider? _selectionProvider;
+        private FadeInOutProvider? _fadeProvider;
         private readonly DispatcherTimer _timer;
 
         private bool _isPlaying;
@@ -25,6 +27,10 @@ namespace SonnissBrowser
         private double _volume = 1.0;
 
         private AudioEffectsSettings? _effects;
+
+        // Selection bounds for selection-aware effects
+        private double _selectionStartSeconds = -1;
+        private double _selectionEndSeconds = -1;
 
         public event Action<string>? MediaFailed;
         public event Action<double>? DurationChanged;
@@ -55,6 +61,25 @@ namespace SonnissBrowser
 
             if (_effects != null)
                 _effects.EffectsChanged += OnEffectsChanged;
+        }
+
+        /// <summary>
+        /// Sets the selection bounds for selection-aware effects.
+        /// Pass -1 for both to apply effects to the entire clip.
+        /// </summary>
+        public void SetSelection(double startSeconds, double endSeconds)
+        {
+            bool changed = Math.Abs(_selectionStartSeconds - startSeconds) > 0.001 ||
+                           Math.Abs(_selectionEndSeconds - endSeconds) > 0.001;
+
+            _selectionStartSeconds = startSeconds;
+            _selectionEndSeconds = endSeconds;
+
+            // Rebuild effects chain if selection changed and we have an active file
+            if (changed && _currentPath != null && _reader != null && _effects != null && _effects.HasEffects)
+            {
+                OnEffectsChanged();
+            }
         }
 
         private void OnEffectsChanged()
@@ -93,8 +118,21 @@ namespace SonnissBrowser
             // Reset reader to beginning
             _reader.Position = 0;
 
-            // Build new effects chain
-            _effectsChain = EffectsChainBuilder.BuildChain(_reader, _effects!, _duration);
+            // Clear provider references
+            _selectionProvider = null;
+            _fadeProvider = null;
+
+            // Build new effects chain with selection awareness
+            var result = EffectsChainBuilder.BuildChainWithResult(
+                _reader,
+                _effects,
+                _duration,
+                _selectionStartSeconds,
+                _selectionEndSeconds);
+
+            _effectsChain = result.Chain;
+            _selectionProvider = result.SelectionProvider;
+            _fadeProvider = result.FadeProvider;
 
             // Create new output
             _waveOut = new WaveOutEvent();
@@ -120,8 +158,21 @@ namespace SonnissBrowser
                 _reader = new AudioFileReader(path);
                 _duration = _reader.TotalTime.TotalSeconds;
 
-                // Build effects chain
-                _effectsChain = EffectsChainBuilder.BuildChain(_reader, _effects!, _duration);
+                // Clear provider references
+                _selectionProvider = null;
+                _fadeProvider = null;
+
+                // Build effects chain with selection awareness
+                var result = EffectsChainBuilder.BuildChainWithResult(
+                    _reader,
+                    _effects,
+                    _duration,
+                    _selectionStartSeconds,
+                    _selectionEndSeconds);
+
+                _effectsChain = result.Chain;
+                _selectionProvider = result.SelectionProvider;
+                _fadeProvider = result.FadeProvider;
 
                 _waveOut = new WaveOutEvent();
                 _waveOut.Init(_effectsChain);
@@ -201,6 +252,8 @@ namespace SonnissBrowser
                 _reader?.Dispose();
                 _reader = null;
                 _effectsChain = null;
+                _selectionProvider = null;
+                _fadeProvider = null;
             }
             catch { }
 
@@ -251,6 +304,11 @@ namespace SonnissBrowser
             var bytePos = (long)(seconds * _reader.WaveFormat.AverageBytesPerSecond);
             bytePos = bytePos - (bytePos % _reader.WaveFormat.BlockAlign);
             _reader.Position = Math.Clamp(bytePos, 0, _reader.Length);
+
+            // Sync position-aware providers
+            var samplePos = (long)(seconds * _reader.WaveFormat.SampleRate) * _reader.WaveFormat.Channels;
+            _selectionProvider?.SetPosition(samplePos);
+            _fadeProvider?.SetPosition(samplePos);
         }
 
         private double GetCurrentPosition()

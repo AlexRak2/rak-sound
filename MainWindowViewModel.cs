@@ -463,6 +463,7 @@ namespace SonnissBrowser
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasSelection));
                 RefreshCommands();
+                SyncSelectionToPlayback();
             }
         }
 
@@ -476,7 +477,13 @@ namespace SonnissBrowser
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasSelection));
                 RefreshCommands();
+                SyncSelectionToPlayback();
             }
+        }
+
+        private void SyncSelectionToPlayback()
+        {
+            _playback.SetSelection(_selectionStartSeconds, _selectionEndSeconds);
         }
 
         private double _waveDragStartSeconds = -1;
