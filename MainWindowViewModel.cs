@@ -69,6 +69,7 @@ namespace SonnissBrowser
             ToggleFavoriteCommand = new RelayCommand(ToggleFavorite);
             ResetEffectsCommand = new RelayCommand(_ => Effects.Reset());
             ToggleThemeCommand = new RelayCommand(_ => IsDarkMode = !IsDarkMode);
+            OpenVoiceCreatorCommand = new RelayCommand(_ => OpenVoiceCreator());
 
             // Connect effects to playback
             _playback.SetEffects(Effects);
@@ -169,6 +170,7 @@ namespace SonnissBrowser
         public ICommand ToggleFavoriteCommand { get; }
         public ICommand ResetEffectsCommand { get; }
         public ICommand ToggleThemeCommand { get; }
+        public ICommand OpenVoiceCreatorCommand { get; }
 
         // ----------------------------
         // Audio effects
@@ -1111,6 +1113,27 @@ namespace SonnissBrowser
         }
 
         private static void RefreshCommands() => CommandManager.InvalidateRequerySuggested();
+
+        // ----------------------------
+        // Voice Creator
+        // ----------------------------
+        private VoiceCreatorWindow? _voiceCreatorWindow;
+
+        private void OpenVoiceCreator()
+        {
+            if (_voiceCreatorWindow == null || !_voiceCreatorWindow.IsLoaded)
+            {
+                _voiceCreatorWindow = new VoiceCreatorWindow();
+                _voiceCreatorWindow.ApplyTheme(_isDarkMode);
+                _voiceCreatorWindow.Closed += (_, _) => _voiceCreatorWindow = null;
+
+                // Subscribe to theme changes
+                ThemeChanged += isDark => _voiceCreatorWindow?.ApplyTheme(isDark);
+            }
+
+            _voiceCreatorWindow.Show();
+            _voiceCreatorWindow.Activate();
+        }
 
         public void Dispose() => _playback.Dispose();
     }

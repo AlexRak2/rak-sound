@@ -647,6 +647,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -677,8 +678,16 @@
                             MinHeight="32"
                             Margin="0,0,8,0"/>
 
+                    <Button Grid.Column="3"
+                            Style="{StaticResource Btn}"
+                            Content="Voice Creator"
+                            Command="{Binding OpenVoiceCreatorCommand}"
+                            Padding="14,8"
+                            MinHeight="32"
+                            Margin="0,0,8,0"/>
+
                     <Button x:Name="ThemeToggleBtn"
-                            Grid.Column="3"
+                            Grid.Column="4"
                             Style="{StaticResource Btn}"
                             Content="{Binding ThemeIcon}"
                             Command="{Binding ToggleThemeCommand}"
@@ -688,7 +697,7 @@
                             FontSize="14"
                             Margin="0,0,8,0"/>
 
-                    <TextBlock Grid.Column="4"
+                    <TextBlock Grid.Column="5"
                                Text="{Binding StatusText}"
                                Foreground="{DynamicResource Text2}"
                                FontSize="10"
